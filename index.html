@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador CLP / IHM</title>
+  <style>
+    body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background-color: #1e1e1e; color: #fff; }
+    .panel { background: #2d2d2d; padding: 20px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); text-align: center; width: 90%; max-width: 400px; }
+    .btn { padding: 15px 25px; margin: 10px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; user-select: none; }
+    .btn-start { background-color: #28a745; color: white; }
+    .btn-stop { background-color: #dc3545; color: white; }
+    .indicator { width: 60px; height: 60px; border-radius: 50%; background-color: #555; margin: 20px auto; transition: background-color 0.2s; }
+    .indicator.active { background-color: #00ff00; box-shadow: 0 0 15px #00ff00; }
+  </style>
+</head>
+<body>
+
+  <div class="panel">
+    <h2>IHM Siemens Virtual</h2>
+    
+    <!-- Botões que alteram as entradas do CLP -->
+    <button class="btn btn-start" 
+            onmousedown="plcMemory.inputs.I0_0 = true" 
+            onmouseup="plcMemory.inputs.I0_0 = false"
+            ontouchstart="plcMemory.inputs.I0_0 = true" 
+            ontouchend="plcMemory.inputs.I0_0 = false">
+      LIGA (I0.0)
+    </button>
+
+    <button class="btn btn-stop" 
+            onmousedown="plcMemory.inputs.I0_1 = true" 
+            onmouseup="plcMemory.inputs.I0_1 = false"
+            ontouchstart="plcMemory.inputs.I0_1 = true" 
+            ontouchend="plcMemory.inputs.I0_1 = false">
+      DESLIGA (I0.1)
+    </button>
+
+    <h3>Saída Q0.0</h3>
+    <div id="output-q0" class="indicator"></div>
+  </div>
+
+  <script>
+    // Atualização da interface visual baseada no estado da memória Q0_0
+    function updateUI() {
+      const q0Element = document.getElementById('output-q0');
+      if (plcMemory.outputs.Q0_0) {
+        q0Element.classList.add('active');
+      } else {
+        q0Element.classList.remove('active');
+      }
+    }
+  </script>
+</body>
+</html>
