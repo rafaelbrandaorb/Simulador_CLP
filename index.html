@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TIA Portal Clone — Monte Sua Lógica</title>
+  <title>RB SIMULADOR — Monte Sua Lógica</title>
   <style>
     :root {
       --tia-bg: #f0f0f0; --tia-panel: #e1e1e1; --tia-blue: #0066b3;
@@ -91,7 +91,7 @@
 <div class="tia-header">
   <div class="tia-title">
     <span>⚙️</span>
-    SIMATIC TIA Portal — Monte Sua Lógica
+    RB SIMULADOR — Monte Sua Lógica
   </div>
   <div style="font-size:12px;">Projeto: Vazio</div>
 </div>
@@ -125,6 +125,630 @@
     </div>
 
     <div class="nav-section">
+      <div class="nav-title">Elementos Ladder</div>
+      <div class="nav-item tool" data-tool="na" id="tool-na">⊢- Contato NA</div>
+      <div class="nav-item tool" data-tool="nf" id="tool-nf">⊢/ Contato NF</div>
+      <div class="nav-item tool" data-tool="coil" id="tool-coil">○ Bobina</div>
+      <div class="nav-item tool" data-tool="ton" id="tool-ton">⏱️ TON — Temporizador</div>
+      <div class="nav-item tool" data-tool="tof" id="tool-tof">⏱️ TOF — Desligamento</div>
+      <div class="nav-item tool" data-tool="wire" id="tool-wire">━ Fio / Ligação</div>
+      <div class="nav-item tool" data-tool="del" id="tool-del">❌ Apagar Elemento</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-title">Elementos IHM</div>
+      <div class="nav-item" data-widget="lamp">💡 Lâmpada</div>
+      <div class="nav-item" data-widget="btn-green">🟢 Botão Liga</div>
+      <div class="nav-item" data-widget="btn-red">🔴 Botão Desl.</div>
+      <div class="nav-item" data-widget="text">📝 Texto / Rótulo</div>
+      <div class="nav-item" data-widget="value">📊 Mostrar Valor</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-title">Dicas de TAGs</div>
+      <div style="font-size:11px; color:#666; padding:4px 8px; line-height:1.6;">
+        <code>I0.0, I0.1...</code> = Entradas<br>
+        <code>Q0.0, Q0.1...</code> = Saídas<br>
+        <code>M0.0, M0.1...</code> = Marcadores<br>
+        <code>T1, T2...</code> = Temporizadores
+      </div>
+    </div>
+  </div>
+
+  <!-- Área de Conteúdo -->
+  <div class="tia-content">
+    <div class="tia-tabs">
+      <button class="tia-tab active" data-pane="ladder">Programação</button>
+      <button class="tia-tab" data-pane="ihm">Tela da IHM</button>
+      <button class="tia-tab" data-pane="monitor">Monitoramento</button>
+    </div>
+
+    <!-- Aba Ladder -->
+    <div class="tia-workspace" id="pane-ladder">
+      <div class="ladder-container">
+        <div class="ladder-rail">
+          <div class="power-left"></div>
+          <div class="rungs" id="rungsArea">
+            <!-- Renderizado via JS -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Aba IHM -->
+    <div class="tia-workspace" id="pane-ihm" style="display:none;">
+      <div class="ihm-canvas" id="ihmCanvas"></div>
+      <div class="props-panel" id="propsPanel" style="display:none;">
+        <h4>Propriedades do Objeto</h4>
+        <div id="propsContent"></div>
+      </div>
+    </div>
+
+    <!-- Aba Monitoramento -->
+    <div class="tia-workspace" id="pane-monitor" style="display:none;">
+      <table class="monitor-table">
+        <thead>
+          <tr>
+            <th>Endereço</th>
+            <th>Tipo</th>
+            <th>Valor</th>
+            <th>Forçar</th>
+          </tr>
+        </thead>
+        <tbody id="monitorBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Barra de Status -->
+<div class="status-bar">
+  <span>Ciclos: <span id="scanCount">0</span></span>
+  <span>Tempo de varredura: 50ms</span>
+  <span id="plcMode">Modo: PARADO</span>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// NÚCLEO DO CLP
+// ══════════════════════════════════════════════════════════
+const PLC = {
+  running: false,
+  interval: null,
+  scanTime: 50,
+
+  // Memória — expansível
+  I: {},
+  Q: {},
+  M: {},
+  T: {},
+
+  ensureAddr(tag) {
+    if (!tag) return;
+    const type = tag[0], num = tag.slice(1);
+    if (['I','Q','M'].includes(type) && this[type][num] === undefined) {
+      this[type][num] = false;
+    }
+    if (type === 'T' && this.T[num] === undefined) {
+      this.T[num] = { preset: 2000, acc: 0, done: false, lastIn: false };
+    }
+  },
+
+  get(tag) {
+    if (!tag) return false;
+    this.ensureAddr(tag);
+    const type = tag[0], num = tag.slice(1);
+    if (['I','Q','M'].includes(type)) return this[type][num] ?? false;
+    if (type === 'T') return this.T[num]?.done ?? false;
+    return false;
+  },
+
+  set(tag, val) {
+    if (!tag) return;
+    this.ensureAddr(tag);
+    const type = tag[0], num = tag.slice(1);
+    if (['I','Q','M'].includes(type)) this[type][num] = Boolean(val);
+  },
+
+  scan() {
+    // Atualizar temporizadores
+    Object.entries(this.T).forEach(([id, t]) => {
+      const inVal = t._power === true;
+      if (inVal) {
+        if (!t.lastIn) t.acc = 0;
+        t.acc += this.scanTime;
+        t.done = t.acc >= t.preset;
+      } else {
+        t.acc = 0; t.done = false;
+      }
+      t.lastIn = inVal;
+    });
+
+    processRungs();
+    renderAll();
+    document.getElementById('scanCount').textContent = ++scanCounter;
+  }
+};
+
+let scanCounter = 0;
+
+// ══════════════════════════════════════════════════════════
+// ESTRUTURA
+// ══════════════════════════════════════════════════════════
+let rungs = []; 
+let ihmWidgets = [];
+
+let selectedTool = null;
+let selectedCell = null;
+let selectedWidget = null;
+let nextRungId = 1;
+let nextWidgetId = 1;
+
+// ══════════════════════════════════════════════════════════
+// PROCESSAMENTO DA LÓGICA
+// ══════════════════════════════════════════════════════════
+function processRungs() {
+  rungs.forEach(rung => {
+    let power = true;
+    rung.cells.forEach(cell => {
+      cell.energized = false;
+      if (!cell.type) return;
+
+      switch (cell.type) {
+        case 'na':
+          power = power && PLC.get(cell.tag);
+          cell.energized = power;
+          break;
+        case 'nf':
+          power = power && !PLC.get(cell.tag);
+          cell.energized = power;
+          break;
+        case 'wire':
+          cell.energized = power;
+          break;
+        case 'coil':
+          PLC.set(cell.tag, power);
+          cell.energized = power;
+          break;
+        case 'ton':
+          const tNum = cell.tag.replace('T','');
+          if (PLC.T[tNum]) {
+            PLC.T[tNum]._power = power;
+            PLC.T[tNum].preset = cell.preset || 2000;
+            cell.energized = PLC.T[tNum].done;
+          }
+          break;
+        case 'tof':
+          const tNumF = cell.tag.replace('T','');
+          if (PLC.T[tNumF]) {
+            if (!PLC.T[tNumF]._startPower && power) {
+              PLC.T[tNumF]._startPower = true;
+              PLC.T[tNumF]._offTime = null;
+            }
+            if (PLC.T[tNumF]._startPower && !power && !PLC.T[tNumF]._offTime) {
+              PLC.T[tNumF]._offTime = Date.now();
+            }
+            if (PLC.T[tNumF]._offTime) {
+              PLC.T[tNumF].acc = Date.now() - PLC.T[tNumF]._offTime;
+              PLC.T[tNumF].done = PLC.T[tNumF].acc >= (cell.preset || 2000);
+            } else {
+              PLC.T[tNumF].acc = 0;
+              PLC.T[tNumF].done = false;
+            }
+            PLC.T[tNumF].preset = cell.preset || 2000;
+            cell.energized = power || !PLC.T[tNumF].done;
+          }
+          break;
+      }
+    });
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// RENDERIZAÇÃO LADDER
+// ══════════════════════════════════════════════════════════
+function renderLadder() {
+  const area = document.getElementById('rungsArea');
+  
+  if (rungs.length === 0) {
+    area.innerHTML = `<div style="padding:30px; color:#888; text-align:center;">
+      Clique em <strong>"+ Nova Linha"</strong> para começar a programar do zero!<br><br>
+      Escolha um elemento na barra lateral → clique na célula para inserir.<br><br>
+      <strong style="color:var(--tia-blue);">💡 DICA: Quando a Simulação (RUN) estiver rodando, clique nos contatos no próprio desenho para ligar/desligar!</strong>
+    </div>`;
+    return;
+  }
+
+  area.innerHTML = '';
+
+  rungs.forEach((rung, rIdx) => {
+    const div = document.createElement('div');
+    div.className = 'rung';
+    div.innerHTML = `<span class="rung-number">${rIdx+1}</span>`;
+
+    rung.cells.forEach((cell, cIdx) => {
+      const e = PLC.running && cell.energized;
+
+      if (cell.type === 'wire') {
+        div.innerHTML += `<div class="ladder-wire ${e ? 'energized' : ''}"></div>`;
+        return;
+      }
+
+      const sel = selectedCell === `${rIdx}-${cIdx}`;
+      let content = '';
+
+      switch (cell.type) {
+        case 'na':
+          content = `<span class="contact-na">||</span><span class="tag-name">${cell.tag}</span>`;
+          break;
+        case 'nf':
+          content = `<span class="contact-nf">|/|</span><span class="tag-name">${cell.tag}</span>`;
+          break;
+        case 'coil':
+          content = `<div class="coil ${e ? 'energized' : ''}">( )</div><span class="tag-name">${cell.tag}</span>`;
+          break;
+        case 'ton':
+          const tNum = cell.tag.replace('T','');
+          const t = PLC.T[tNum] || {acc:0, preset:cell.preset};
+          content = `<div class="ton-box">TON<br><small>${cell.tag}</small><br>${Math.round(t.acc)}/${cell.preset}ms</div>`;
+          break;
+        case 'tof':
+          const tNumF = cell.tag.replace('T','');
+          const tf = PLC.T[tNumF] || {acc:0, preset:cell.preset};
+          content = `<div class="ton-box" style="border-color:#d04040;">TOF<br><small>${cell.tag}</small><br>${Math.round(tf.acc)}/${cell.preset}ms</div>`;
+          break;
+        default:
+          content = '<span style="color:#ccc;">+</span>';
+      }
+
+      div.innerHTML += `
+        <div class="ladder-cell ${cell.type ? 'filled' : ''} ${e ? 'energized' : ''} ${sel ? 'selected' : ''}" 
+             data-r="${rIdx}" data-c="${cIdx}" onclick="cellClick(${rIdx}, ${cIdx})">
+          ${content}
+        </div>`;
+    });
+
+    div.innerHTML += `
+      <div class="ladder-cell" data-r="${rIdx}" data-c="${rung.cells.length}" 
+           onclick="cellClick(${rIdx}, ${rung.cells.length})">+</div>`;
+
+    area.appendChild(div);
+  });
+}
+
+function addRung() {
+  if (PLC.running) return alert('Pare a simulação (STOP) para adicionar linhas.');
+  rungs.push({ id: nextRungId++, cells: [] });
+  renderLadder();
+}
+
+function clearAll() {
+  if (PLC.running) return alert('Pare a simulação (STOP) para limpar.');
+  if (!confirm('Tem certeza? Apaga toda a programação!')) return;
+  rungs = [];
+  ihmWidgets = [];
+  PLC.I = {}; PLC.Q = {}; PLC.M = {}; PLC.T = {};
+  renderAll();
+}
+
+// ══════════════════════════════════════════════════════════
+// INTERAÇÃO E CLIQUES NO LADDER (EDIÇÃO E EXECUÇÃO)
+// ══════════════════════════════════════════════════════════
+function cellClick(r, c) {
+  const rung = rungs[r];
+  if (!rung) return;
+
+  const cell = rung.cells[c];
+
+  // SE O CLP ESTIVER RODANDO, O CLIQUE SERVE PARA TESTAR A LÓGICA (TIPO TIA PORTAL)
+  if (PLC.running) {
+    if (cell && (cell.type === 'na' || cell.type === 'nf')) {
+      const currentVal = PLC.get(cell.tag);
+      PLC.set(cell.tag, !currentVal); // Inverte o valor da entrada
+      renderAll();
+    } else {
+      // Ignora clique em células vazias, fios ou ferramentas enquanto roda
+      console.log('Modo RUN: Apenas contatos NA e NF podem ser forçados com clique direto.');
+    }
+    return; // Encerra aqui, protegendo o código de edições acidentais em RUN
+  }
+
+  // ---- DAQUI PARA BAIXO É APENAS MODO STOP (EDIÇÃO) ---- //
+
+  // Apagar
+  if (selectedTool === 'del') {
+    if (cell) {
+      rung.cells.splice(c, 1);
+      if (rung.cells[c]?.type === 'wire') rung.cells.splice(c, 1);
+    }
+    selectedTool = null;
+    updateToolHighlight();
+    renderLadder();
+    return;
+  }
+
+  // Inserir fio
+  if (selectedTool === 'wire') {
+    rung.cells.splice(c, 0, { type: 'wire' });
+    renderLadder();
+    return;
+  }
+
+  // Inserir elemento
+  if (selectedTool && ['na','nf','coil','ton','tof'].includes(selectedTool)) {
+    const tag = prompt('Digite a TAG:\nEx: I0.0, Q0.0, M0.0, T1');
+    if (!tag) { selectedTool = null; updateToolHighlight(); return; }
+
+    const newCell = { type: selectedTool, tag: tag.toUpperCase() };
+    
+    if (selectedTool === 'ton' || selectedTool === 'tof') {
+      const t = prompt('Tempo em milissegundos:\nEx: 2000 = 2 segundos', 2000);
+      newCell.preset = parseInt(t) || 2000;
+    }
+
+    rung.cells.splice(c, 0, newCell);
+    rung.cells.splice(c+1, 0, { type: 'wire' });
+    
+    selectedTool = null;
+    updateToolHighlight();
+    renderLadder();
+    return;
+  }
+
+  // Editar existente
+  if (cell && cell.type && cell.type !== 'wire') {
+    selectedCell = `${r}-${c}`;
+    setTimeout(() => {
+      const newTag = prompt('Editar TAG:', cell.tag);
+      if (newTag !== null) cell.tag = newTag.toUpperCase();
+      if (cell.type === 'ton' || cell.type === 'tof') {
+        const t = prompt('Tempo em ms:', cell.preset);
+        if (t !== null) cell.preset = parseInt(t) || 2000;
+      }
+      renderLadder();
+    }, 50);
+  } else {
+    selectedCell = `${r}-${c}`;
+    renderLadder();
+  }
+}
+
+function updateToolHighlight() {
+  document.querySelectorAll('.nav-item.tool').forEach(el => {
+    el.classList.toggle('selected', el.dataset.tool === selectedTool);
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// IHM E MONITORAMENTO (RESTA INALTERADO)
+// ══════════════════════════════════════════════════════════
+function addWidget(type) {
+  if(PLC.running) return alert('Pare a simulação para desenhar a IHM.');
+  const w = { id: nextWidgetId++, type, x: 40 + Math.random()*100, y: 40 + Math.random()*100, tag: '', text: '' };
+  ihmWidgets.push(w);
+  renderIHM();
+  selectWidget(w.id);
+}
+
+function renderIHM() {
+  const canvas = document.getElementById('ihmCanvas');
+  canvas.innerHTML = '';
+  if (ihmWidgets.length === 0) {
+    canvas.innerHTML = `<div style="padding:30px; color:#888; text-align:center;">Adicione elementos da barra lateral para montar sua IHM</div>`;
+    return;
+  }
+
+  ihmWidgets.forEach(w => {
+    const el = document.createElement('div');
+    el.className = `ihm-obj ${w.type}`;
+    el.style.left = w.x + 'px';
+    el.style.top = w.y + 'px';
+    el.dataset.id = w.id;
+
+    const val = PLC.get(w.tag);
+
+    switch (w.type) {
+      case 'lamp':
+        el.classList.add('ihm-lamp');
+        if (val) el.classList.add('on');
+        el.innerHTML = `<span style="position:absolute;bottom:-18px;font-size:11px;">${w.tag}</span>`;
+        break;
+      case 'btn-green':
+        el.classList.add('ihm-btn', 'green');
+        el.innerHTML = w.text || 'LIGA';
+        el.onmousedown = el.ontouchstart = () => { if(w.tag) PLC.set(w.tag, true); };
+        el.onmouseup = el.ontouchend = el.onmouseleave = () => { if(w.tag) PLC.set(w.tag, false); };
+        break;
+      case 'btn-red':
+        el.classList.add('ihm-btn', 'red');
+        el.innerHTML = w.text || 'DESLIGA';
+        el.onmousedown = el.ontouchstart = () => { if(w.tag) PLC.set(w.tag, false); };
+        break;
+      case 'text':
+        el.classList.add('ihm-text');
+        el.innerHTML = w.text || 'Texto';
+        break;
+      case 'value':
+        el.classList.add('ihm-box');
+        const tNum = w.tag?.replace('T','');
+        const t = PLC.T[tNum];
+        el.innerHTML = t ? `${Math.round(t.acc)} / ${t.preset}` : (val ? '1' : '0');
+        break;
+    }
+
+    if (selectedWidget === w.id) el.classList.add('selected');
+    if (!PLC.running) {
+      el.onclick = (e) => { e.stopPropagation(); selectWidget(w.id); };
+      makeDraggable(el, w);
+    }
+    canvas.appendChild(el);
+  });
+}
+
+function selectWidget(id) {
+  selectedWidget = id;
+  renderIHM();
+  renderProps();
+  document.getElementById('propsPanel').style.display = 'block';
+}
+
+function renderProps() {
+  const cont = document.getElementById('propsContent');
+  const w = ihmWidgets.find(x => x.id === selectedWidget);
+  if (!w) { document.getElementById('propsPanel').style.display = 'none'; return; }
+  cont.innerHTML = `
+    <label>Tag Vinculada</label>
+    <input type="text" id="pTag" value="${w.tag}" placeholder="ex: I0.0, Q0.0">
+    <label>Texto / Rótulo</label>
+    <input type="text" id="pText" value="${w.text || ''}">
+    <button class="tia-btn" style="margin-top:12px;width:100%;color:#d04040;" onclick="delWidget(${w.id})">Excluir</button>
+  `;
+  document.getElementById('pTag').oninput = e => { w.tag = e.target.value.toUpperCase(); renderIHM(); };
+  document.getElementById('pText').oninput = e => { w.text = e.target.value; renderIHM(); };
+}
+
+function delWidget(id) { ihmWidgets = ihmWidgets.filter(w => w.id !== id); selectedWidget = null; renderIHM(); renderProps(); }
+
+function makeDraggable(el, w) {
+  let dx, dy;
+  const start = e => {
+    if(PLC.running) return;
+    const t = e.touches?.[0] || e;
+    dx = t.clientX - w.x; dy = t.clientY - w.y;
+    document.addEventListener('mousemove', move);
+    document.addEventListener('touchmove', move, {passive:false});
+    document.addEventListener('mouseup', end, {once:true});
+    document.addEventListener('touchend', end, {once:true});
+  };
+  const move = e => {
+    e.preventDefault();
+    const t = e.touches?.[0] || e;
+    w.x = Math.max(0, t.clientX - dx);
+    w.y = Math.max(0, t.clientY - dy);
+    el.style.left = w.x+'px'; el.style.top = w.y+'px';
+  };
+  const end = () => {};
+  el.addEventListener('mousedown', start);
+  el.addEventListener('touchstart', start, {passive:true});
+}
+
+function renderMonitor() {
+  const body = document.getElementById('monitorBody');
+  const rows = [];
+  Object.entries(PLC.I).forEach(([n,v]) => rows.push(['I'+n, 'Entrada', v, 'I', n]));
+  Object.entries(PLC.Q).forEach(([n,v]) => rows.push(['Q'+n, 'Saída', v, 'Q', n]));
+  Object.entries(PLC.M).forEach(([n,v]) => rows.push(['M'+n, 'Marcador', v, 'M', n]));
+  Object.entries(PLC.T).forEach(([n,t]) => rows.push(['T'+n, 'Temporizador', `${t.done} (${Math.round(t.acc)}ms)`, null, null]));
+
+  if (rows.length === 0) {
+    body.innerHTML = `<tr><td colspan="4" style="color:#888; text-align:center; padding:20px;">Nenhuma TAG usada ainda</td></tr>`;
+    return;
+  }
+  body.innerHTML = rows.map(([addr, tipo, val, letra, num]) => `
+    <tr>
+      <td><code>${addr}</code></td>
+      <td>${tipo}</td>
+      <td class="${val === true ? 'bit-1' : 'bit-0'}">${val}</td>
+      <td>${letra ? `<button class="force-btn" onclick="PLC.set('${letra}${num}', ${!val})">${val?'0':'1'}</button>` : ''}</td>
+    </tr>`).join('');
+}
+
+// ══════════════════════════════════════════════════════════
+// CONTROLE GERAL
+// ══════════════════════════════════════════════════════════
+function startPLC() {
+  if (PLC.running) return;
+  
+  // Limpa seleções de ferramentas antes de rodar
+  selectedTool = null;
+  updateToolHighlight();
+  document.getElementById('propsPanel').style.display = 'none';
+
+  PLC.running = true;
+  PLC.interval = setInterval(() => PLC.scan(), PLC.scanTime);
+  document.getElementById('statusDot').classList.add('active');
+  document.getElementById('statusText').textContent = 'EXECUTANDO';
+  document.getElementById('plcMode').textContent = 'Modo: RUN';
+  document.getElementById('btnStart').disabled = true;
+  document.getElementById('btnStop').disabled = false;
+  
+  renderAll(); // Atualiza a tela para refletir o estado de RUN
+}
+
+function stopPLC() {
+  PLC.running = false;
+  clearInterval(PLC.interval);
+  
+  // Reseta estado das bobinas para 0 quando para
+  Object.keys(PLC.Q).forEach(k => PLC.Q[k] = false);
+
+  document.getElementById('statusDot').classList.remove('active');
+  document.getElementById('statusText').textContent = 'PARADO';
+  document.getElementById('plcMode').textContent = 'Modo: STOP';
+  document.getElementById('btnStart').disabled = false;
+  document.getElementById('btnStop').disabled = true;
+  
+  renderAll();
+}
+
+function renderAll() { renderLadder(); renderIHM(); renderMonitor(); }
+
+function saveProject() {
+  localStorage.setItem('tia-vazio-rungs', JSON.stringify(rungs));
+  localStorage.setItem('tia-vazio-ihm', JSON.stringify(ihmWidgets));
+  alert('✅ Projeto Salvo!');
+}
+
+function loadProject() {
+  const l = localStorage.getItem('tia-vazio-rungs');
+  const i = localStorage.getItem('tia-vazio-ihm');
+  if (!l && !i) return alert('Nenhum projeto salvo!');
+  if (l) rungs = JSON.parse(l);
+  if (i) {
+    ihmWidgets = JSON.parse(i);
+    nextWidgetId = Math.max(0, ...ihmWidgets.map(w => w.id)) + 1;
+  }
+  renderAll();
+  alert('✅ Projeto Carregado!');
+}
+
+// Seleção de ferramentas
+document.querySelectorAll('[data-tool]').forEach(el => {
+  el.onclick = () => {
+    if (PLC.running) return alert("Pare a simulação (STOP) para usar ferramentas.");
+    selectedTool = el.dataset.tool;
+    updateToolHighlight();
+  };
+});
+
+// Seleção de página/aba
+document.querySelectorAll('[data-pane]').forEach(el => {
+  if (el.dataset.tool || el.dataset.widget) return;
+  el.onclick = () => {
+    const pane = el.dataset.pane;
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    document.querySelectorAll('.tia-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tia-workspace').forEach(w => w.style.display = 'none');
+    
+    if (el.classList.contains('nav-item')) el.classList.add('active');
+    document.querySelector(`.tia-tab[data-pane="${pane}"]`)?.classList.add('active');
+    document.getElementById(`pane-${pane}`).style.display = 'block';
+    
+    if (pane === 'ihm') renderIHM();
+    if (pane === 'monitor') renderMonitor();
+  };
+});
+
+// Elementos IHM
+document.querySelectorAll('[data-widget]').forEach(el => {
+  el.onclick = () => addWidget(el.dataset.widget);
+});
+
+// Inicializar
+renderLadder();
+</script>
+</body>
+</html>
       <div class="nav-title">Elementos Ladder</div>
       <div class="nav-item tool" data-tool="na" id="tool-na">⊢- Contato NA</div>
       <div class="nav-item tool" data-tool="nf" id="tool-nf">⊢/ Contato NF</div>
