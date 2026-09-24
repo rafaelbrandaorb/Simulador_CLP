@@ -3,656 +3,143 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RB Simulador PLC - Estilo TIA Portal</title>
+  <title>Simulador Siemens TIA Portal - Selo</title>
   <style>
-    :root {
-      --bg-color: #1e1e1e;
-      --panel-bg: #252526;
-      --border-color: #3e3e42;
-      --text-color: #d4d4d4;
-      --accent-color: #007acc;
-      --energized: #00ff66;
-      --de-energized: #555555;
-    }
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #1e1e1e; color: #dcdcdc; margin: 0; padding: 15px; display: flex; flex-direction: column; align-items: center; }
+    .container { width: 100%; max-width: 650px; background: #252526; border: 1px solid #3c3c3c; border-radius: 6px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); padding: 15px; box-sizing: border-box; }
+    
+    h2 { color: #009999; margin-top: 0; border-bottom: 2px solid #009999; padding-bottom: 5px; font-size: 1.2rem; }
+    
+    /* ESTILO LADDER (TIA PORTAL) */
+    .ladder-network { background: #181818; border: 1px solid #444; border-radius: 4px; padding: 15px; margin-bottom: 20px; font-family: monospace; }
+    .network-title { color: #888; font-size: 0.85rem; margin-bottom: 10px; }
+    
+    .rung-container { display: flex; align-items: center; position: relative; padding: 10px 0; }
+    .rail { width: 4px; height: 90px; background-color: #009999; }
+    .line { height: 3px; background-color: #666; flex-grow: 1; }
+    .line.active { background-color: #00ff00; }
+    
+    /* RAMIFICAÇÃO (PARALELO) */
+    .parallel-block { display: flex; flex-direction: column; position: relative; margin: 0 5px; }
+    .parallel-branch { display: flex; align-items: center; margin: 5px 0; }
+    .branch-line { position: absolute; left: 0; top: 15px; bottom: 15px; width: 3px; background-color: #666; }
+    .branch-line-right { position: absolute; right: 0; top: 15px; bottom: 15px; width: 3px; background-color: #666; }
+    .branch-line.active, .branch-line-right.active { background-color: #00ff00; }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    }
+    /* COMPONENTES LADDER */
+    .contact, .coil { border: 2px solid #aaa; background: #2d2d2d; padding: 4px 8px; border-radius: 3px; text-align: center; font-weight: bold; min-width: 50px; font-size: 0.8rem; }
+    .contact.active, .coil.active { border-color: #00ff00; color: #00ff00; box-shadow: 0 0 8px rgba(0, 255, 0, 0.4); }
+    .tag-name { font-size: 0.7rem; color: #ff9900; display: block; }
 
-    body {
-      background-color: var(--bg-color);
-      color: var(--text-color);
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    header {
-      background-color: #333333;
-      padding: 10px 20px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    header h1 {
-      font-size: 1.2rem;
-      color: #fff;
-    }
-
-    .header-btns {
-      display: flex;
-      gap: 10px;
-    }
-
-    button {
-      background: var(--accent-color);
-      color: white;
-      border: none;
-      padding: 8px 14px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-weight: bold;
-      transition: background 0.2s;
-    }
-
-    button:hover { background: #005999; }
-    button.btn-run { background: #28a745; }
-    button.btn-run:hover { background: #218838; }
-    button.btn-stop { background: #dc3545; }
-    button.btn-stop:hover { background: #c82333; }
-
-    .main-container {
-      display: flex;
-      flex: 1;
-      overflow: hidden;
-    }
-
-    /* Painel Lateral / Sidebar */
-    .sidebar {
-      width: 240px;
-      background-color: var(--panel-bg);
-      border-right: 1px solid var(--border-color);
-      padding: 15px;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-      user-select: none;
-    }
-
-    .nav-section {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .nav-section h3 {
-      font-size: 0.85rem;
-      text-transform: uppercase;
-      color: #888;
-      margin-bottom: 5px;
-    }
-
-    .nav-item {
-      padding: 10px;
-      background: #2d2d30;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      transition: all 0.2s;
-    }
-
-    .nav-item:hover { background: #3e3e42; }
-    .nav-item.active {
-      border-color: var(--accent-color);
-      background: #094771;
-    }
-
-    /* Área de Trabalho Ladder */
-    .workspace {
-      flex: 1;
-      padding: 20px;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-
-    .rung {
-      display: flex;
-      align-items: center;
-      background: #252526;
-      border: 1px solid var(--border-color);
-      padding: 10px 15px;
-      border-radius: 6px;
-      min-height: 80px;
-      position: relative;
-    }
-
-    .rung-number {
-      position: absolute;
-      left: 6px;
-      top: 6px;
-      font-size: 0.75rem;
-      color: #777;
-    }
-
-    .ladder-cell {
-      display: inline-flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-width: 60px;
-      height: 50px;
-      border: 1px dashed #444;
-      border-radius: 4px;
-      margin: 0 4px;
-      cursor: pointer;
-      position: relative;
-      background: #1e1e1e;
-    }
-
-    .ladder-cell:hover { border-color: var(--accent-color); }
-    .ladder-cell.filled { border-style: solid; border-color: var(--de-energized); }
-    .ladder-cell.filled.energized { border-color: var(--energized); }
-
-    .ladder-wire {
-      width: 24px;
-      height: 2px;
-      background-color: var(--de-energized);
-      margin: 0 2px;
-    }
-    .ladder-wire.energized { background-color: var(--energized); }
-
-    /* Selo / Ramificação em Paralelo Estilo TIA Portal */
-    .branch-container {
-      display: inline-flex;
-      flex-direction: column;
-      position: relative;
-      padding: 0 8px;
-      margin: 0 4px;
-      border-left: 3px solid var(--de-energized);
-      border-right: 3px solid var(--de-energized);
-      transition: border-color 0.15s;
-      cursor: pointer;
-      background: #181818;
-      border-radius: 4px;
-    }
-
-    .branch-container.energized {
-      border-color: var(--energized);
-    }
-
-    .branch-row {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 52px;
-      position: relative;
-      padding: 4px 0;
-    }
-
-    .branch-divider {
-      width: 100%;
-      height: 1px;
-      background: #333;
-      margin: 2px 0;
-    }
-
-    .contact-na { font-weight: bold; font-size: 1.2rem; color: #aaa; }
-    .contact-nf { font-weight: bold; font-size: 1.2rem; color: #aaa; }
-    .coil { font-weight: bold; font-size: 1.1rem; color: #aaa; }
-    .tag-name { font-size: 0.75rem; color: #4ec9b0; margin-top: 2px; }
-
-    .energized .contact-na,
-    .energized .contact-nf,
-    .energized .coil {
-      color: var(--energized);
-    }
-
-    .ton-box {
-      font-size: 0.75rem;
-      text-align: center;
-      border: 1px solid var(--de-energized);
-      padding: 2px 5px;
-      border-radius: 3px;
-    }
-    .energized .ton-box { border-color: var(--energized); color: var(--energized); }
-
-    /* Painel E/S (Entradas e Saídas) */
-    .io-panel {
-      width: 260px;
-      background-color: var(--panel-bg);
-      border-left: 1px solid var(--border-color);
-      padding: 15px;
-      display: flex;
-      flex-direction: column;
-      gap: 15px;
-    }
-
-    .io-panel h3 { font-size: 0.85rem; text-transform: uppercase; color: #888; }
-
-    .io-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
-    }
-
-    .io-btn {
-      padding: 8px;
-      background: #333;
-      border: 1px solid #555;
-      color: #fff;
-      font-size: 0.8rem;
-      border-radius: 4px;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    .io-btn.active {
-      background: #008000;
-      border-color: var(--energized);
-      box-shadow: 0 0 8px rgba(0,255,102,0.4);
-    }
-
-    .io-indicator {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #555;
-    }
-    .io-btn.active .io-indicator { background: var(--energized); }
+    /* IHM VIRTUAL */
+    .hmi-panel { background: #333; border: 2px solid #555; border-radius: 6px; padding: 15px; text-align: center; }
+    .btn { padding: 12px 20px; margin: 5px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; user-select: none; }
+    .btn-start { background-color: #28a745; color: white; }
+    .btn-stop { background-color: #dc3545; color: white; }
+    .indicator { width: 45px; height: 45px; border-radius: 50%; background-color: #444; margin: 10px auto; border: 2px solid #666; }
+    .indicator.active { background-color: #00ff00; box-shadow: 0 0 12px #00ff00; }
   </style>
 </head>
 <body>
 
-  <header>
-    <h1>RB SIMULADOR PLC — TIA Portal Style</h1>
-    <div class="header-btns">
-      <button class="btn-run" onclick="toggleSimulation()">▶ Iniciar Simulação</button>
-      <button onclick="addRung()">+ Nova Linha</button>
-      <button onclick="clearLadder()" style="background:#666;">Limpar Tudo</button>
-    </div>
-  </header>
+<div class="container">
+  <h2>TIA Portal - Network 1: Partida Direta com Selo</h2>
 
-  <div class="main-container">
-    <!-- Barra de Ferramentas -->
-    <div class="sidebar">
-      <div class="nav-section">
-        <h3>Instruções Ladder</h3>
-        <div class="nav-item tool" data-tool="na" id="tool-na">|| Contato NA</div>
-        <div class="nav-item tool" data-tool="nf" id="tool-nf">|/| Contato NF</div>
-        <div class="nav-item tool" data-tool="selo" id="tool-selo">🔀 Inserir Selo (TIA Portal)</div>
-        <div class="nav-item tool" data-tool="coil" id="tool-coil">( ) Bobina</div>
-        <div class="nav-item tool" data-tool="ton" id="tool-ton">⏱ Temporizador TON</div>
-        <div class="nav-item tool" data-tool="wire" id="tool-wire">― Conector (Linha)</div>
-        <div class="nav-item tool" data-tool="del" id="tool-del" style="color: #ff6666;">❌ Apagar Item</div>
+  <!-- VISUALIZAÇÃO DO LADDER -->
+  <div class="ladder-network">
+    <div class="network-title">Main [OB1] - Network 1: Comando do Motor</div>
+    <div class="rung-container">
+      <div class="rail"></div>
+      
+      <!-- RAMIFICAÇÃO (SELO EM PARALELO) -->
+      <div class="branch-line" id="b-left"></div>
+      <div class="parallel-block">
+        <div class="parallel-branch">
+          <div class="line" id="l1"></div>
+          <div class="contact" id="c-i00"><span class="tag-name">%I0.0</span>-| |-</div>
+          <div class="line" id="l2"></div>
+        </div>
+        <div class="parallel-branch">
+          <div class="line" id="l3"></div>
+          <div class="contact" id="c-q00-selo"><span class="tag-name">%Q0.0</span>-| |-</div>
+          <div class="line" id="l4"></div>
+        </div>
       </div>
-    </div>
+      <div class="branch-line-right" id="b-right"></div>
 
-    <!-- Área da Diagramação Ladder -->
-    <div class="workspace" id="rungsArea"></div>
+      <!-- CONTATO NF E BOBINA EM SÉRIE -->
+      <div class="line" id="l5"></div>
+      <div class="contact" id="c-i01"><span class="tag-name">%I0.1</span>-|/|-</div>
+      <div class="line" id="l6"></div>
+      <div class="coil" id="coil-q00"><span class="tag-name">%Q0.0</span>-( )</div>
+      <div class="line" id="l7"></div>
 
-    <!-- Monitoramento E/S -->
-    <div class="io-panel">
-      <h3>Entradas Digitais (I)</h3>
-      <div class="io-grid" id="inputsGrid"></div>
-
-      <h3 style="margin-top: 15px;">Saídas Digitais (Q)</h3>
-      <div class="io-grid" id="outputsGrid"></div>
+      <div class="rail"></div>
     </div>
   </div>
 
-  <script>
-    // Estado Global do PLC
-    const PLC = {
-      running: false,
-      memory: {},
-      T: {
-        '1': { acc: 0, preset: 2000, done: false, _power: false },
-        '2': { acc: 0, preset: 2000, done: false, _power: false }
-      },
-      get(tag) {
-        return !!this.memory[tag];
-      },
-      set(tag, val) {
-        this.memory[tag] = !!val;
-      }
-    };
+  <!-- IHM DO PAINEL -->
+  <div class="hmi-panel">
+    <h3>Painel de Operação (IHM)</h3>
+    <button class="btn btn-start" 
+            onmousedown="plcMemory.inputs.I0_0 = true" onmouseup="plcMemory.inputs.I0_0 = false"
+            ontouchstart="plcMemory.inputs.I0_0 = true" ontouchend="plcMemory.inputs.I0_0 = false">
+      LIGA (%I0.0)
+    </button>
 
-    let rungs = [];
-    let selectedTool = null;
-    let timerInterval = null;
+    <button class="btn btn-stop" 
+            onmousedown="plcMemory.inputs.I0_1 = true" onmouseup="plcMemory.inputs.I0_1 = false"
+            ontouchstart="plcMemory.inputs.I0_1 = true" ontouchend="plcMemory.inputs.I0_1 = false">
+      DESLIGA (%I0.1)
+    </button>
 
-    // Inicialização da interface de Entradas/Saídas
-    function initIO() {
-      const inGrid = document.getElementById('inputsGrid');
-      const outGrid = document.getElementById('outputsGrid');
-      inGrid.innerHTML = '';
-      outGrid.innerHTML = '';
+    <p style="margin-top: 15px; font-size: 0.9rem;">Status do Motor (%Q0.0):</p>
+    <div id="hmi-led" class="indicator"></div>
+  </div>
+</div>
 
-      for (let i = 0; i < 8; i++) {
-        const tag = `I0.${i}`;
-        inGrid.innerHTML += `
-          <button class="io-btn" id="btn-${tag}" onclick="toggleInput('${tag}')">
-            ${tag} <span class="io-indicator"></span>
-          </button>`;
-      }
+<script>
+  // 1. Memória da CPU Siemens
+  const plcMemory = {
+    inputs: { I0_0: false, I0_1: false },
+    outputs: { Q0_0: false }
+  };
 
-      for (let i = 0; i < 8; i++) {
-        const tag = `Q0.${i}`;
-        outGrid.innerHTML += `
-          <div class="io-btn" id="btn-${tag}" style="cursor:default;">
-            ${tag} <span class="io-indicator"></span>
-          </div>`;
-      }
-    }
+  // 2. Scan Cycle do CLP
+  function plcScan() {
+    // Lógica do Selo: Q0.0 = (I0.0 OR Q0.0) AND NOT I0.1
+    const ramificacaoSelo = plcMemory.inputs.I0_0 || plcMemory.outputs.Q0_0;
+    const desligaNF = !plcMemory.inputs.I0_1;
+    
+    plcMemory.outputs.Q0_0 = ramificacaoSelo && desligaNF;
 
-    function toggleInput(tag) {
-      PLC.set(tag, !PLC.get(tag));
-      updateIOVisuals();
-      if (PLC.running) runCycle();
-    }
+    updateLadderUI(ramificacaoSelo, desligaNF);
+  }
 
-    function updateIOVisuals() {
-      for (let i = 0; i < 8; i++) {
-        const inTag = `I0.${i}`;
-        const btnIn = document.getElementById(`btn-${inTag}`);
-        if (btnIn) btnIn.classList.toggle('active', PLC.get(inTag));
+  // 3. Atualiza a tela em estilo TIA Portal
+  function updateLadderUI(seloAtivo, desligaNF) {
+    const q = plcMemory.outputs.Q0_0;
 
-        const outTag = `Q0.${i}`;
-        const btnOut = document.getElementById(`btn-${outTag}`);
-        if (btnOut) btnOut.classList.toggle('active', PLC.get(outTag));
-      }
-    }
+    // Atualiza contatos e linhas
+    document.getElementById('c-i00').classList.toggle('active', plcMemory.inputs.I0_0);
+    document.getElementById('c-q00-selo').classList.toggle('active', q);
+    document.getElementById('c-i01').classList.toggle('active', desligaNF);
+    document.getElementById('coil-q00').classList.toggle('active', q);
 
-    // Seleção de Ferramenta
-    document.querySelectorAll('.tool').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const tool = btn.getAttribute('data-tool');
-        selectedTool = selectedTool === tool ? null : tool;
-        updateToolHighlight();
-      });
-    });
+    // Linhas energizadas
+    document.getElementById('b-left').classList.toggle('active', seloAtivo);
+    document.getElementById('b-right').classList.toggle('active', seloAtivo);
+    document.getElementById('l5').classList.toggle('active', seloAtivo);
+    document.getElementById('l6').classList.toggle('active', seloAtivo && desligaNF);
+    document.getElementById('l7').classList.toggle('active', q);
 
-    function updateToolHighlight() {
-      document.querySelectorAll('.tool').forEach(btn => {
-        btn.classList.toggle('active', btn.getAttribute('data-tool') === selectedTool);
-      });
-    }
+    // IHM
+    document.getElementById('hmi-led').classList.toggle('active', q);
+  }
 
-    function addRung() {
-      rungs.push({ cells: [] });
-      renderLadder();
-    }
+  // Roda a 50ms (Simulação do tempo de execução)
+  setInterval(plcScan, 50);
+</script>
 
-    function clearLadder() {
-      if (confirm('Deseja realmente apagar todo o programa?')) {
-        rungs = [];
-        renderLadder();
-      }
-    }
-
-    // Avaliação individual de elementos
-    function evalElement(cell, powerIn) {
-      if (!cell || !cell.type) return false;
-      if (cell.type === 'na') return powerIn && PLC.get(cell.tag);
-      if (cell.type === 'nf') return powerIn && !PLC.get(cell.tag);
-      return false;
-    }
-
-    // Processamento do Scan do PLC
-    function processRungs() {
-      rungs.forEach(rung => {
-        let power = true;
-        rung.cells.forEach(cell => {
-          cell.energized = false;
-          if (!cell.type) return;
-
-          // Processa Ramificação em Paralelo (Selo)
-          if (cell.type === 'branch') {
-            const topPower = evalElement(cell.top, power);
-            if (cell.top) cell.top.energized = topPower;
-
-            const bottomPower = evalElement(cell.bottom, power);
-            if (cell.bottom) cell.bottom.energized = bottomPower;
-
-            // Transmite energia se o caminho superior OU inferior for conduzido
-            power = topPower || bottomPower;
-            cell.energized = power;
-          } 
-          else if (cell.type === 'na') {
-            power = power && PLC.get(cell.tag);
-            cell.energized = power;
-          } 
-          else if (cell.type === 'nf') {
-            power = power && !PLC.get(cell.tag);
-            cell.energized = power;
-          } 
-          else if (cell.type === 'wire') {
-            cell.energized = power;
-          } 
-          else if (cell.type === 'coil') {
-            PLC.set(cell.tag, power);
-            cell.energized = power;
-          } 
-          else if (cell.type === 'ton') {
-            const tNum = cell.tag.replace('T','');
-            if (PLC.T[tNum]) {
-              PLC.T[tNum]._power = power;
-              PLC.T[tNum].preset = cell.preset || 2000;
-              cell.energized = PLC.T[tNum].done;
-            }
-          }
-        });
-      });
-    }
-
-    // Atualização dos Temporizadores TON
-    function updateTimers(dt) {
-      Object.keys(PLC.T).forEach(k => {
-        const timer = PLC.T[k];
-        if (timer._power) {
-          if (timer.acc < timer.preset) {
-            timer.acc += dt;
-            if (timer.acc >= timer.preset) {
-              timer.acc = timer.preset;
-              timer.done = true;
-            }
-          }
-        } else {
-          timer.acc = 0;
-          timer.done = false;
-        }
-      });
-    }
-
-    function runCycle() {
-      processRungs();
-      updateIOVisuals();
-      renderLadder();
-    }
-
-    function toggleSimulation() {
-      PLC.running = !PLC.running;
-      const btn = document.querySelector('.btn-run');
-
-      if (PLC.running) {
-        btn.textContent = '⏹ Parar Simulação';
-        btn.className = 'btn-stop';
-        timerInterval = setInterval(() => {
-          updateTimers(100);
-          runCycle();
-        }, 100);
-      } else {
-        btn.textContent = '▶ Iniciar Simulação';
-        btn.className = 'btn-run';
-        clearInterval(timerInterval);
-        runCycle();
-      }
-    }
-
-    // Renderização Visual da Linguagem Ladder
-    function renderLadder() {
-      const area = document.getElementById('rungsArea');
-      if (rungs.length === 0) {
-        area.innerHTML = `<div style="padding:40px; color:#777; text-align:center;">
-          Clique no botão <strong>"+ Nova Linha"</strong> acima para montar seu circuito Ladder!
-        </div>`;
-        return;
-      }
-
-      area.innerHTML = '';
-
-      rungs.forEach((rung, rIdx) => {
-        const div = document.createElement('div');
-        div.className = 'rung';
-        div.innerHTML = `<span class="rung-number">RUNG ${rIdx+1}</span>`;
-
-        rung.cells.forEach((cell, cIdx) => {
-          const e = PLC.running && cell.energized;
-
-          if (cell.type === 'wire') {
-            div.innerHTML += `<div class="ladder-wire ${e ? 'energized' : ''}"></div>`;
-            return;
-          }
-
-          // Bloco do Selo Paralelo estilo TIA Portal
-          if (cell.type === 'branch') {
-            const topE = PLC.running && cell.top?.energized;
-            const botE = PLC.running && cell.bottom?.energized;
-
-            div.innerHTML += `
-              <div class="branch-container ${e ? 'energized' : ''}" onclick="cellClick(${rIdx}, ${cIdx})">
-                <div class="branch-row">
-                  <div class="ladder-cell filled ${topE ? 'energized' : ''}">
-                    <span class="contact-na">||</span>
-                    <span class="tag-name">${cell.top ? cell.top.tag : 'S/TAG'}</span>
-                  </div>
-                </div>
-                <div class="branch-divider"></div>
-                <div class="branch-row">
-                  <div class="ladder-cell filled ${botE ? 'energized' : ''}">
-                    <span class="contact-na">||</span>
-                    <span class="tag-name">${cell.bottom ? cell.bottom.tag : 'S/TAG'}</span>
-                  </div>
-                </div>
-              </div>`;
-            return;
-          }
-
-          let content = '';
-          switch (cell.type) {
-            case 'na':
-              content = `<span class="contact-na">||</span><span class="tag-name">${cell.tag}</span>`;
-              break;
-            case 'nf':
-              content = `<span class="contact-nf">|/|</span><span class="tag-name">${cell.tag}</span>`;
-              break;
-            case 'coil':
-              content = `<div class="coil ${e ? 'energized' : ''}">( )</div><span class="tag-name">${cell.tag}</span>`;
-              break;
-            case 'ton':
-              const tNum = cell.tag.replace('T','');
-              const t = PLC.T[tNum] || {acc:0, preset:cell.preset};
-              content = `<div class="ton-box">TON<br><small>${cell.tag}</small><br>${Math.round(t.acc)}/${cell.preset}ms</div>`;
-              break;
-            default:
-              content = '<span style="color:#555;">+</span>';
-          }
-
-          div.innerHTML += `
-            <div class="ladder-cell ${cell.type ? 'filled' : ''} ${e ? 'energized' : ''}" 
-                 onclick="cellClick(${rIdx}, ${cIdx})">
-              ${content}
-            </div>`;
-        });
-
-        div.innerHTML += `
-          <div class="ladder-cell" onclick="cellClick(${rIdx}, ${rung.cells.length})">+</div>`;
-        area.appendChild(div);
-      });
-    }
-
-    // Clique e Adição de Componentes na Célula
-    function cellClick(r, c) {
-      const rung = rungs[r];
-      if (!rung) return;
-
-      // Inserção do Selo em Paralelo
-      if (selectedTool === 'selo') {
-        const tagTop = prompt('TAG do Contato Principal (Botão LIGA):\nEx: I0.0', 'I0.0');
-        if (!tagTop) { selectedTool = null; updateToolHighlight(); return; }
-
-        const tagBottom = prompt('TAG do Contato do Selo (Saída Paralela):\nEx: Q0.0', 'Q0.0');
-        if (!tagBottom) { selectedTool = null; updateToolHighlight(); return; }
-
-        const branchCell = {
-          type: 'branch',
-          top: { type: 'na', tag: tagTop.toUpperCase() },
-          bottom: { type: 'na', tag: tagBottom.toUpperCase() }
-        };
-
-        rung.cells.splice(c, 0, branchCell);
-        rung.cells.splice(c + 1, 0, { type: 'wire' });
-
-        selectedTool = null;
-        updateToolHighlight();
-        renderLadder();
-        return;
-      }
-
-      // Remover item
-      if (selectedTool === 'del') {
-        if (rung.cells[c]) rung.cells.splice(c, 1);
-        selectedTool = null;
-        updateToolHighlight();
-        renderLadder();
-        return;
-      }
-
-      // Inserir Conector (Linha)
-      if (selectedTool === 'wire') {
-        rung.cells.splice(c, 0, { type: 'wire' });
-        renderLadder();
-        return;
-      }
-
-      // Inserir Contatos, Bobinas e Timers
-      if (selectedTool && ['na','nf','coil','ton'].includes(selectedTool)) {
-        const tag = prompt('Digite a TAG do dispositivo:\nEx: I0.0, Q0.0, M0.0, T1');
-        if (!tag) { selectedTool = null; updateToolHighlight(); return; }
-
-        const newCell = { type: selectedTool, tag: tag.toUpperCase() };
-        if (selectedTool === 'ton') {
-          const t = prompt('Tempo em milissegundos (Ex: 2000 = 2s):', 2000);
-          newCell.preset = parseInt(t) || 2000;
-        }
-
-        rung.cells.splice(c, 0, newCell);
-        rung.cells.splice(c + 1, 0, { type: 'wire' });
-
-        selectedTool = null;
-        updateToolHighlight();
-        renderLadder();
-        return;
-      }
-    }
-
-    // Inicialização ao carregar a página
-    initIO();
-    addRung();
-  </script>
 </body>
 </html>
